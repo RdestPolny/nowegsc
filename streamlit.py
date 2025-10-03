@@ -1,437 +1,540 @@
-import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
-import plotly.express as px
-from datetime import datetime, timedelta
-import numpy as np
+import React, { useState, useEffect } from 'react';
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { TrendingUp, Globe, Link, MousePointer, Eye, Calendar } from 'lucide-react';
 
-# Konfiguracja strony
-st.set_page_config(
-    page_title="Google Search Console Dashboard",
-    page_icon="📊",
-    layout="wide"
-)
+const GSCDashboard = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [sites, setSites] = useState([]);
+  const [selectedSite, setSelectedSite] = useState('');
+  const [dateRange, setDateRange] = useState({ start: '2025-07-01', end: '2025-09-30' });
+  const [selectedPeriod, setSelectedPeriod] = useState('custom');
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState(null);
+  const [aggregation, setAggregation] = useState('month'); // 'day' or 'month'
 
-# Style CSS
-st.markdown("""
-    <style>
-    .metric-card {
-        background-color: #f0f2f6;
-        padding: 20px;
-        border-radius: 10px;
-        border-left: 5px solid #1f77b4;
+  // Mock data dla demonstracji - rozszerzony do 16 miesięcy
+  const generateMockData = () => {
+    const dailyData = [];
+    const startDate = new Date('2024-06-01');
+    const endDate = new Date('2025-09-30');
+    
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 7)) {
+      const baseClicks = 400 + Math.random() * 200;
+      const trend = (d - startDate) / (endDate - startDate) * 600;
+      
+      dailyData.push({
+        date: d.toISOString().split('T')[0],
+        clicks: Math.round(baseClicks + trend + Math.random() * 100),
+        impressions: Math.round((baseClicks + trend) * 25 + Math.random() * 3000),
+        ctr: 3.5 + Math.random() * 1.5,
+        position: 9 - (d - startDate) / (endDate - startDate) * 4
+      });
     }
-    .stButton>button {
-        width: 100%;
+    
+    return dailyData;
+  };
+
+  const mockData = {
+    timeSeriesData: generateMockData(),
+    countryData: [
+      { country: 'Polska', clicks: 8500, impressions: 185000, ctr: 4.59 },
+      { country: 'USA', clicks: 1200, impressions: 32000, ctr: 3.75 },
+      { country: 'Niemcy', clicks: 950, impressions: 28000, ctr: 3.39 },
+      { country: 'UK', clicks: 720, impressions: 21000, ctr: 3.43 },
+      { country: 'Francja', clicks: 580, impressions: 18500, ctr: 3.14 }
+    ],
+    topPages: [
+      { page: '/blog/seo-tips-2025', clicks: 2100, impressions: 45000, ctr: 4.67, position: 4.2 },
+      { page: '/produkty/kategoria-a', clicks: 1850, impressions: 42000, ctr: 4.40, position: 5.1 },
+      { page: '/', clicks: 1600, impressions: 38000, ctr: 4.21, position: 3.8 },
+      { page: '/blog/marketing-content', clicks: 1320, impressions: 35000, ctr: 3.77, position: 6.3 },
+      { page: '/uslugi', clicks: 1100, impressions: 28000, ctr: 3.93, position: 5.8 },
+      { page: '/blog/google-analytics', clicks: 980, impressions: 25000, ctr: 3.92, position: 7.1 },
+      { page: '/kontakt', clicks: 850, impressions: 22000, ctr: 3.86, position: 8.2 },
+      { page: '/o-nas', clicks: 720, impressions: 19000, ctr: 3.79, position: 6.9 }
+    ],
+    topQueries: [
+      { query: 'optymalizacja seo', clicks: 1250, impressions: 28000, ctr: 4.46, position: 4.5 },
+      { query: 'marketing internetowy', clicks: 1120, impressions: 26500, ctr: 4.23, position: 5.2 },
+      { query: 'pozycjonowanie stron', clicks: 980, impressions: 24000, ctr: 4.08, position: 6.1 },
+      { query: 'content marketing', clicks: 850, impressions: 21000, ctr: 4.05, position: 5.8 },
+      { query: 'analityka google', clicks: 720, impressions: 19000, ctr: 3.79, position: 6.5 },
+      { query: 'social media marketing', clicks: 650, impressions: 17500, ctr: 3.71, position: 7.2 },
+      { query: 'strategia seo', clicks: 580, impressions: 15800, ctr: 3.67, position: 7.8 },
+      { query: 'reklama google ads', clicks: 520, impressions: 14200, ctr: 3.66, position: 8.1 }
+    ],
+    deviceData: [
+      { device: 'Mobile', clicks: 5800, impressions: 135000 },
+      { device: 'Desktop', clicks: 4200, impressions: 98000 },
+      { device: 'Tablet', clicks: 1000, impressions: 25000 }
+    ]
+  };
+
+  const handleAuth = () => {
+    setLoading(true);
+    // Symulacja autoryzacji OAuth
+    setTimeout(() => {
+      setIsAuthenticated(true);
+      setSites(['https://example.com', 'https://blog.example.com']);
+      setLoading(false);
+    }, 1500);
+  };
+
+  const setPeriod = (period) => {
+    const today = new Date('2025-09-30');
+    let startDate;
+    
+    switch(period) {
+      case '1month':
+        startDate = new Date(today);
+        startDate.setMonth(startDate.getMonth() - 1);
+        setAggregation('day');
+        break;
+      case '3months':
+        startDate = new Date(today);
+        startDate.setMonth(startDate.getMonth() - 3);
+        setAggregation('month');
+        break;
+      case '12months':
+        startDate = new Date(today);
+        startDate.setMonth(startDate.getMonth() - 12);
+        setAggregation('month');
+        break;
+      case '16months':
+        startDate = new Date(today);
+        startDate.setMonth(startDate.getMonth() - 16);
+        setAggregation('month');
+        break;
+      default:
+        return;
     }
-    </style>
-    """, unsafe_allow_html=True)
+    
+    setDateRange({
+      start: startDate.toISOString().split('T')[0],
+      end: today.toISOString().split('T')[0]
+    });
+    setSelectedPeriod(period);
+  };
 
-# Funkcje pomocnicze
-@st.cache_data
-def generate_mock_data():
-    """Generuje przykładowe dane dla demonstracji"""
-    dates = pd.date_range(start='2024-06-01', end='2025-09-30', freq='W')
+  const aggregateDataByMonth = (data) => {
+    const monthlyData = {};
     
-    data = []
-    for i, date in enumerate(dates):
-        base_clicks = 400 + np.random.random() * 200
-        trend = i * 10
-        
-        data.append({
-            'date': date,
-            'clicks': int(base_clicks + trend + np.random.random() * 100),
-            'impressions': int((base_clicks + trend) * 25 + np.random.random() * 3000),
-            'ctr': 3.5 + np.random.random() * 1.5,
-            'position': 9 - (i / len(dates)) * 4
-        })
+    data.forEach(item => {
+      const monthKey = item.date.substring(0, 7); // YYYY-MM
+      
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = {
+          date: monthKey,
+          clicks: 0,
+          impressions: 0,
+          positions: [],
+          ctrs: []
+        };
+      }
+      
+      monthlyData[monthKey].clicks += item.clicks;
+      monthlyData[monthKey].impressions += item.impressions;
+      monthlyData[monthKey].positions.push(item.position);
+      monthlyData[monthKey].ctrs.push(item.ctr);
+    });
     
-    df = pd.DataFrame(data)
-    df['date'] = pd.to_datetime(df['date'])
-    return df
+    return Object.values(monthlyData).map(month => ({
+      date: month.date,
+      clicks: month.clicks,
+      impressions: month.impressions,
+      ctr: month.ctrs.reduce((a, b) => a + b, 0) / month.ctrs.length,
+      position: month.positions.reduce((a, b) => a + b, 0) / month.positions.length
+    })).sort((a, b) => a.date.localeCompare(b.date));
+  };
 
-def get_country_data():
-    """Zwraca dane o ruchu według krajów"""
-    return pd.DataFrame({
-        'country': ['Polska', 'USA', 'Niemcy', 'UK', 'Francja'],
-        'clicks': [8500, 1200, 950, 720, 580],
-        'impressions': [185000, 32000, 28000, 21000, 18500],
-        'ctr': [4.59, 3.75, 3.39, 3.43, 3.14]
-    })
+  const getFilteredData = () => {
+    if (!data) return null;
+    
+    const filtered = data.timeSeriesData.filter(item => 
+      item.date >= dateRange.start && item.date <= dateRange.end
+    );
+    
+    return aggregation === 'month' ? aggregateDataByMonth(filtered) : filtered;
+  };
 
-def get_top_pages():
-    """Zwraca najpopularniejsze strony"""
-    return pd.DataFrame({
-        'page': [
-            '/blog/seo-tips-2025',
-            '/produkty/kategoria-a',
-            '/',
-            '/blog/marketing-content',
-            '/uslugi',
-            '/blog/google-analytics',
-            '/kontakt',
-            '/o-nas'
-        ],
-        'clicks': [2100, 1850, 1600, 1320, 1100, 980, 850, 720],
-        'impressions': [45000, 42000, 38000, 35000, 28000, 25000, 22000, 19000],
-        'ctr': [4.67, 4.40, 4.21, 3.77, 3.93, 3.92, 3.86, 3.79],
-        'position': [4.2, 5.1, 3.8, 6.3, 5.8, 7.1, 8.2, 6.9]
-    })
+  const handleSiteSelect = (site) => {
+    setSelectedSite(site);
+    setLoading(true);
+    // Symulacja pobierania danych
+    setTimeout(() => {
+      setData(mockData);
+      setLoading(false);
+    }, 1000);
+  };
 
-def get_top_queries():
-    """Zwraca najpopularniejsze zapytania"""
-    return pd.DataFrame({
-        'query': [
-            'optymalizacja seo',
-            'marketing internetowy',
-            'pozycjonowanie stron',
-            'content marketing',
-            'analityka google',
-            'social media marketing',
-            'strategia seo',
-            'reklama google ads'
-        ],
-        'clicks': [1250, 1120, 980, 850, 720, 650, 580, 520],
-        'impressions': [28000, 26500, 24000, 21000, 19000, 17500, 15800, 14200],
-        'ctr': [4.46, 4.23, 4.08, 4.05, 3.79, 3.71, 3.67, 3.66],
-        'position': [4.5, 5.2, 6.1, 5.8, 6.5, 7.2, 7.8, 8.1]
-    })
+  const StatCard = ({ icon: Icon, title, value, change, color }) => (
+    <div className="bg-white rounded-lg shadow p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-gray-500 text-sm">{title}</p>
+          <p className="text-2xl font-bold mt-1">{value}</p>
+          {change && (
+            <p className={`text-sm mt-1 ${change > 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {change > 0 ? '+' : ''}{change}% vs poprzedni okres
+            </p>
+          )}
+        </div>
+        <div className={`${color} p-3 rounded-lg`}>
+          <Icon className="text-white" size={24} />
+        </div>
+      </div>
+    </div>
+  );
 
-def get_device_data():
-    """Zwraca dane o urządzeniach"""
-    return pd.DataFrame({
-        'device': ['Mobile', 'Desktop', 'Tablet'],
-        'clicks': [5800, 4200, 1000],
-        'impressions': [135000, 98000, 25000]
-    })
+  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
-def aggregate_by_month(df):
-    """Agreguje dane do miesięcy"""
-    df_copy = df.copy()
-    df_copy['month'] = df_copy['date'].dt.to_period('M')
-    
-    monthly = df_copy.groupby('month').agg({
-        'clicks': 'sum',
-        'impressions': 'sum',
-        'ctr': 'mean',
-        'position': 'mean'
-    }).reset_index()
-    
-    monthly['date'] = monthly['month'].dt.to_timestamp()
-    monthly = monthly.drop('month', axis=1)
-    
-    return monthly
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
+          <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+            <TrendingUp className="text-blue-600" size={32} />
+          </div>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Google Search Console</h1>
+          <p className="text-gray-600 mb-6">Połącz się z GSC, aby zobaczyć swoje dane analityczne</p>
+          <button
+            onClick={handleAuth}
+            disabled={loading}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Łączenie...' : 'Połącz z Google'}
+          </button>
+          <p className="text-xs text-gray-500 mt-4">
+            Ta aplikacja używa OAuth 2.0 do bezpiecznego połączenia z GSC
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-def filter_data_by_period(df, period):
-    """Filtruje dane według wybranego okresu"""
-    end_date = pd.Timestamp('2025-09-30')
-    
-    if period == '1month':
-        start_date = end_date - timedelta(days=30)
-        aggregation = 'day'
-    elif period == '3months':
-        start_date = end_date - timedelta(days=90)
-        aggregation = 'month'
-    elif period == '12months':
-        start_date = end_date - timedelta(days=365)
-        aggregation = 'month'
-    elif period == '16months':
-        start_date = end_date - timedelta(days=480)
-        aggregation = 'month'
-    else:
-        return df, 'day'
-    
-    filtered = df[(df['date'] >= start_date) & (df['date'] <= end_date)]
-    
-    if aggregation == 'month':
-        filtered = aggregate_by_month(filtered)
-    
-    return filtered, aggregation
+  if (!selectedSite) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-3xl font-bold text-gray-800 mb-6">Wybierz witrynę</h1>
+          <div className="grid gap-4">
+            {sites.map((site) => (
+              <div
+                key={site}
+                onClick={() => handleSiteSelect(site)}
+                className="bg-white rounded-lg shadow hover:shadow-lg transition p-6 cursor-pointer border-2 border-transparent hover:border-blue-500"
+              >
+                <div className="flex items-center">
+                  <Globe className="text-blue-600 mr-4" size={32} />
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-800">{site}</h3>
+                    <p className="text-gray-500">Kliknij, aby zobaczyć dane</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-# Inicjalizacja session state
-if 'authenticated' not in st.session_state:
-    st.session_state.authenticated = False
-if 'selected_site' not in st.session_state:
-    st.session_state.selected_site = None
-if 'period' not in st.session_state:
-    st.session_state.period = '3months'
+  if (loading || !data) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Ładowanie danych...</p>
+        </div>
+      </div>
+    );
+  }
 
-# Strona logowania
-if not st.session_state.authenticated:
-    st.markdown("<h1 style='text-align: center;'>📊 Google Search Console Dashboard</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #666;'>Połącz się z GSC, aby zobaczyć swoje dane analityczne</p>", unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        if st.button("🔐 Połącz z Google", use_container_width=True, type="primary"):
-            st.session_state.authenticated = True
-            st.rerun()
-        
-        st.info("🔒 Ta aplikacja używa OAuth 2.0 do bezpiecznego połączenia z GSC")
+  const totalClicks = data.timeSeriesData.reduce((sum, d) => sum + d.clicks, 0);
+  const totalImpressions = data.timeSeriesData.reduce((sum, d) => sum + d.impressions, 0);
+  const avgCTR = (totalClicks / totalImpressions * 100).toFixed(2);
+  const avgPosition = (data.timeSeriesData.reduce((sum, d) => sum + d.position, 0) / data.timeSeriesData.length).toFixed(1);
 
-# Wybór witryny
-elif st.session_state.selected_site is None:
-    st.title("📂 Wybierz witrynę")
-    
-    sites = ['https://example.com', 'https://blog.example.com']
-    
-    for site in sites:
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.markdown(f"### 🌐 {site}")
-            st.caption("Kliknij przycisk, aby zobaczyć dane")
-        with col2:
-            if st.button("Wybierz", key=site, use_container_width=True):
-                st.session_state.selected_site = site
-                st.rerun()
+  const filteredData = getFilteredData();
+  const periodClicks = filteredData.reduce((sum, d) => sum + d.clicks, 0);
+  const periodImpressions = filteredData.reduce((sum, d) => sum + d.impressions, 0);
+  const periodCTR = (periodClicks / periodImpressions * 100).toFixed(2);
+  const periodPosition = (filteredData.reduce((sum, d) => sum + d.position, 0) / filteredData.length).toFixed(1);
 
-# Dashboard główny
-else:
-    # Pobierz dane
-    data = generate_mock_data()
-    
-    # Nagłówek
-    st.title("📊 Dashboard Google Search Console")
-    st.markdown(f"**Witryna:** {st.session_state.selected_site}")
-    
-    # Przyciski wyboru okresu
-    st.markdown("### 📅 Wybierz okres")
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        if st.button("Ostatni miesiąc", use_container_width=True, 
-                    type="primary" if st.session_state.period == '1month' else "secondary"):
-            st.session_state.period = '1month'
-            st.rerun()
-    
-    with col2:
-        if st.button("Kwartał (3 msc)", use_container_width=True,
-                    type="primary" if st.session_state.period == '3months' else "secondary"):
-            st.session_state.period = '3months'
-            st.rerun()
-    
-    with col3:
-        if st.button("Ostatnie 12 msc", use_container_width=True,
-                    type="primary" if st.session_state.period == '12months' else "secondary"):
-            st.session_state.period = '12months'
-            st.rerun()
-    
-    with col4:
-        if st.button("Ostatnie 16 msc", use_container_width=True,
-                    type="primary" if st.session_state.period == '16months' else "secondary"):
-            st.session_state.period = '16months'
-            st.rerun()
-    
-    # Filtruj dane
-    filtered_data, aggregation = filter_data_by_period(data, st.session_state.period)
-    
-    # Własny zakres dat
-    st.markdown("### 🗓️ Lub wybierz własny zakres")
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        start_date = st.date_input("Data początkowa", value=filtered_data['date'].min())
-    with col2:
-        end_date = st.date_input("Data końcowa", value=filtered_data['date'].max())
-    with col3:
-        custom_agg = st.selectbox("Agregacja", ["Dziennie", "Miesięcznie"])
-    
-    if st.button("Zastosuj własny zakres"):
-        filtered_data = data[(data['date'] >= pd.Timestamp(start_date)) & 
-                            (data['date'] <= pd.Timestamp(end_date))]
-        if custom_agg == "Miesięcznie":
-            filtered_data = aggregate_by_month(filtered_data)
-        aggregation = 'day' if custom_agg == "Dziennie" else 'month'
-    
-    st.divider()
-    
-    # Metryki
-    total_clicks = int(filtered_data['clicks'].sum())
-    total_impressions = int(filtered_data['impressions'].sum())
-    avg_ctr = (total_clicks / total_impressions * 100) if total_impressions > 0 else 0
-    avg_position = filtered_data['position'].mean()
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric(
-            label="🖱️ Kliknięcia w okresie",
-            value=f"{total_clicks:,}",
-            delta="+12.5%"
-        )
-    
-    with col2:
-        st.metric(
-            label="👁️ Wyświetlenia w okresie",
-            value=f"{total_impressions:,}",
-            delta="+8.3%"
-        )
-    
-    with col3:
-        st.metric(
-            label="📈 Średnie CTR",
-            value=f"{avg_ctr:.2f}%",
-            delta="+5.2%"
-        )
-    
-    with col4:
-        st.metric(
-            label="📍 Średnia pozycja",
-            value=f"{avg_position:.1f}",
-            delta="-8.5%",
-            delta_color="inverse"
-        )
-    
-    st.divider()
-    
-    # Wykres: Ruch w czasie
-    st.markdown(f"### 📊 Ruch w czasie ({'miesięcznie' if aggregation == 'month' else 'dziennie'})")
-    
-    fig_traffic = go.Figure()
-    fig_traffic.add_trace(go.Scatter(
-        x=filtered_data['date'],
-        y=filtered_data['clicks'],
-        name='Kliknięcia',
-        line=dict(color='#3b82f6', width=3),
-        yaxis='y'
-    ))
-    fig_traffic.add_trace(go.Scatter(
-        x=filtered_data['date'],
-        y=filtered_data['impressions'],
-        name='Wyświetlenia',
-        line=dict(color='#10b981', width=3),
-        yaxis='y2'
-    ))
-    
-    fig_traffic.update_layout(
-        height=400,
-        hovermode='x unified',
-        yaxis=dict(title='Kliknięcia', side='left'),
-        yaxis2=dict(title='Wyświetlenia', side='right', overlaying='y'),
-        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
-    )
-    
-    st.plotly_chart(fig_traffic, use_container_width=True)
-    
-    # Wykres: CTR i Pozycja
-    st.markdown(f"### 📈 CTR i Pozycja w czasie ({'miesięcznie' if aggregation == 'month' else 'dziennie'})")
-    
-    fig_metrics = go.Figure()
-    fig_metrics.add_trace(go.Scatter(
-        x=filtered_data['date'],
-        y=filtered_data['ctr'],
-        name='CTR (%)',
-        line=dict(color='#f59e0b', width=3),
-        yaxis='y'
-    ))
-    fig_metrics.add_trace(go.Scatter(
-        x=filtered_data['date'],
-        y=filtered_data['position'],
-        name='Pozycja',
-        line=dict(color='#ef4444', width=3),
-        yaxis='y2'
-    ))
-    
-    fig_metrics.update_layout(
-        height=400,
-        hovermode='x unified',
-        yaxis=dict(title='CTR (%)', side='left'),
-        yaxis2=dict(title='Pozycja (średnia)', side='right', overlaying='y', autorange='reversed'),
-        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
-    )
-    
-    st.plotly_chart(fig_metrics, use_container_width=True)
-    
-    st.divider()
-    
-    # Sekcja z krajami i urządzeniami
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("### 🌍 Ruch według krajów")
-        country_data = get_country_data()
-        
-        fig_countries = px.bar(
-            country_data,
-            x='clicks',
-            y='country',
-            orientation='h',
-            color='clicks',
-            color_continuous_scale='Blues',
-            text='clicks'
-        )
-        fig_countries.update_traces(texttemplate='%{text:,}', textposition='outside')
-        fig_countries.update_layout(height=400, showlegend=False, xaxis_title='Kliknięcia')
-        
-        st.plotly_chart(fig_countries, use_container_width=True)
-    
-    with col2:
-        st.markdown("### 📱 Ruch według urządzeń")
-        device_data = get_device_data()
-        
-        fig_devices = px.pie(
-            device_data,
-            values='clicks',
-            names='device',
-            color_discrete_sequence=['#3b82f6', '#10b981', '#f59e0b']
-        )
-        fig_devices.update_traces(textposition='inside', textinfo='percent+label')
-        fig_devices.update_layout(height=400)
-        
-        st.plotly_chart(fig_devices, use_container_width=True)
-    
-    st.divider()
-    
-    # Tabele
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("### 🔗 Najpopularniejsze strony")
-        top_pages = get_top_pages()
-        st.dataframe(
-            top_pages.style.format({
-                'clicks': '{:,}',
-                'impressions': '{:,}',
-                'ctr': '{:.2f}%',
-                'position': '{:.1f}'
-            }),
-            hide_index=True,
-            use_container_width=True,
-            height=400
-        )
-    
-    with col2:
-        st.markdown("### 🔍 Najpopularniejsze zapytania")
-        top_queries = get_top_queries()
-        st.dataframe(
-            top_queries.style.format({
-                'clicks': '{:,}',
-                'impressions': '{:,}',
-                'ctr': '{:.2f}%',
-                'position': '{:.1f}'
-            }),
-            hide_index=True,
-            use_container_width=True,
-            height=400
-        )
-    
-    # Sidebar z dodatkowymi opcjami
-    with st.sidebar:
-        st.markdown("### ⚙️ Opcje")
-        st.markdown(f"**Aktualny okres:** {st.session_state.period}")
-        st.markdown(f"**Agregacja:** {aggregation}")
-        
-        st.divider()
-        
-        if st.button("🔄 Odśwież dane", use_container_width=True):
-            st.rerun()
-        
-        if st.button("🚪 Wyloguj", use_container_width=True):
-            st.session_state.authenticated = False
-            st.session_state.selected_site = None
-            st.rerun()
-        
-        st.divider()
-        st.caption("📊 Google Search Console Dashboard")
-        st.caption("Wersja 1.0 - Streamlit")
+  return (
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-800">Dashboard GSC</h1>
+              <p className="text-gray-600 mt-1">{selectedSite}</p>
+            </div>
+          </div>
+          
+          {/* Period Selection Buttons */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            <button
+              onClick={() => setPeriod('1month')}
+              className={`px-4 py-2 rounded-lg font-medium transition ${
+                selectedPeriod === '1month'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-700 border hover:bg-gray-50'
+              }`}
+            >
+              Ostatni miesiąc
+            </button>
+            <button
+              onClick={() => setPeriod('3months')}
+              className={`px-4 py-2 rounded-lg font-medium transition ${
+                selectedPeriod === '3months'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-700 border hover:bg-gray-50'
+              }`}
+            >
+              Kwartał (3 msc)
+            </button>
+            <button
+              onClick={() => setPeriod('12months')}
+              className={`px-4 py-2 rounded-lg font-medium transition ${
+                selectedPeriod === '12months'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-700 border hover:bg-gray-50'
+              }`}
+            >
+              Ostatnie 12 msc
+            </button>
+            <button
+              onClick={() => setPeriod('16months')}
+              className={`px-4 py-2 rounded-lg font-medium transition ${
+                selectedPeriod === '16months'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-700 border hover:bg-gray-50'
+              }`}
+            >
+              Ostatnie 16 msc
+            </button>
+          </div>
+          
+          {/* Custom Date Range */}
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-sm text-gray-600 font-medium">Własny zakres:</span>
+            <input
+              type="date"
+              value={dateRange.start}
+              onChange={(e) => {
+                setDateRange({...dateRange, start: e.target.value});
+                setSelectedPeriod('custom');
+              }}
+              className="border rounded px-3 py-2 text-sm"
+            />
+            <input
+              type="date"
+              value={dateRange.end}
+              onChange={(e) => {
+                setDateRange({...dateRange, end: e.target.value});
+                setSelectedPeriod('custom');
+              }}
+              className="border rounded px-3 py-2 text-sm"
+            />
+            <select
+              value={aggregation}
+              onChange={(e) => setAggregation(e.target.value)}
+              className="border rounded px-3 py-2 text-sm"
+            >
+              <option value="day">Dziennie</option>
+              <option value="month">Miesięcznie</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <StatCard
+            icon={MousePointer}
+            title="Kliknięcia w okresie"
+            value={periodClicks.toLocaleString()}
+            change={12.5}
+            color="bg-blue-500"
+          />
+          <StatCard
+            icon={Eye}
+            title="Wyświetlenia w okresie"
+            value={periodImpressions.toLocaleString()}
+            change={8.3}
+            color="bg-green-500"
+          />
+          <StatCard
+            icon={TrendingUp}
+            title="Średnie CTR"
+            value={`${periodCTR}%`}
+            change={5.2}
+            color="bg-yellow-500"
+          />
+          <StatCard
+            icon={Calendar}
+            title="Średnia pozycja"
+            value={periodPosition}
+            change={-8.5}
+            color="bg-purple-500"
+          />
+        </div>
+
+        {/* Time Series Chart */}
+        <div className="bg-white rounded-lg shadow p-6 mb-8">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">
+            Ruch w czasie ({aggregation === 'month' ? 'miesięcznie' : 'dziennie'})
+          </h2>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={filteredData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="date" 
+                angle={-45}
+                textAnchor="end"
+                height={80}
+              />
+              <YAxis yAxisId="left" />
+              <YAxis yAxisId="right" orientation="right" />
+              <Tooltip />
+              <Legend />
+              <Line yAxisId="left" type="monotone" dataKey="clicks" stroke="#3b82f6" strokeWidth={2} name="Kliknięcia" />
+              <Line yAxisId="right" type="monotone" dataKey="impressions" stroke="#10b981" strokeWidth={2} name="Wyświetlenia" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* CTR and Position Chart */}
+        <div className="bg-white rounded-lg shadow p-6 mb-8">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">
+            CTR i Pozycja w czasie ({aggregation === 'month' ? 'miesięcznie' : 'dziennie'})
+          </h2>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={filteredData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="date" 
+                angle={-45}
+                textAnchor="end"
+                height={80}
+              />
+              <YAxis yAxisId="left" />
+              <YAxis yAxisId="right" orientation="right" reversed />
+              <Tooltip />
+              <Legend />
+              <Line yAxisId="left" type="monotone" dataKey="ctr" stroke="#f59e0b" strokeWidth={2} name="CTR (%)" />
+              <Line yAxisId="right" type="monotone" dataKey="position" stroke="#ef4444" strokeWidth={2} name="Pozycja" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Country and Device Distribution */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">Ruch według krajów</h2>
+            <div className="space-y-3">
+              {data.countryData.map((country, idx) => (
+                <div key={country.country}>
+                  <div className="flex justify-between mb-1">
+                    <span className="font-medium">{country.country}</span>
+                    <span className="text-gray-600">{country.clicks.toLocaleString()} kliknięć</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full"
+                      style={{ width: `${(country.clicks / data.countryData[0].clicks) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">Ruch według urządzeń</h2>
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie
+                  data={data.deviceData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({device, percent}) => `${device} ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="clicks"
+                >
+                  {data.deviceData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Top Pages Table */}
+        <div className="bg-white rounded-lg shadow p-6 mb-8">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">Najpopularniejsze strony</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Strona</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Kliknięcia</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Wyświetlenia</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">CTR</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Pozycja</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {data.topPages.map((page, idx) => (
+                  <tr key={idx} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm text-gray-800">{page.page}</td>
+                    <td className="px-4 py-3 text-sm text-right">{page.clicks.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-sm text-right">{page.impressions.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-sm text-right">{page.ctr.toFixed(2)}%</td>
+                    <td className="px-4 py-3 text-sm text-right">{page.position.toFixed(1)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Top Queries Table */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">Najpopularniejsze zapytania</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Zapytanie</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Kliknięcia</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Wyświetlenia</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">CTR</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Pozycja</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {data.topQueries.map((query, idx) => (
+                  <tr key={idx} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm text-gray-800">{query.query}</td>
+                    <td className="px-4 py-3 text-sm text-right">{query.clicks.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-sm text-right">{query.impressions.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-sm text-right">{query.ctr.toFixed(2)}%</td>
+                    <td className="px-4 py-3 text-sm text-right">{query.position.toFixed(1)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default GSCDashboard;
